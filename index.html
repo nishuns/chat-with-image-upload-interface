@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Chat and Image Upload Interface</title>
+    <script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #121212;
+            color: #ffffff;
+        }
+
+        #app {
+            width: 80%;
+            margin: 0 auto;
+            padding: 20px;
+            border: 1px solid #333;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+
+        .preview-box {
+            display: flex;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+
+        .preview-item {
+            position: relative;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+
+        .preview-item img {
+            max-width: 50px;
+            max-height: 50px;
+            border-radius: 5px;
+        }
+
+        .preview-item .bx {
+            position: absolute;
+            top: -10px;
+            right: -10px;
+            font-size: 20px;
+            cursor: pointer;
+            color: red;
+        }
+
+        .chat-box {
+            height: 300px;
+            overflow-y: scroll;
+            border: 1px solid #333;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            background-color: #1e1e1e;
+        }
+
+        .chat-message {
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+        }
+
+        .chat-message img {
+            max-width: 50px;
+            max-height: 50px;
+            border-radius: 5px;
+            margin-right: 10px;
+        }
+
+        .chat-message p {
+            margin: 0;
+            padding: 10px;
+            border-radius: 5px;
+            background-color: #333;
+            flex: 1;
+        }
+
+        input[type="text"] {
+            width: calc(100% - 22px);
+            padding: 10px;
+            border: 1px solid #333;
+            border-radius: 3px;
+            margin-bottom: 10px;
+            background-color: #1e1e1e;
+            color: #ffffff;
+        }
+
+        .send-button {
+            padding: 10px;
+            border: none;
+            background-color: #5cb85c;
+            color: white;
+            border-radius: 3px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .send-button .bx {
+            font-size: 20px;
+            margin-left: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app">
+        <div class="preview-box" v-if="imagePreviews.length">
+            <div class="preview-item" v-for="(image, index) in imagePreviews" :key="index">
+                <img :src="image" alt="Image preview">
+                <i class='bx bx-x-circle' @click="removeImage(index)"></i>
+            </div>
+        </div>
+        <div class="chat-box" ref="chatBox">
+            <div class="chat-message" v-for="message in messages" :key="message.id">
+                <div v-if="message.images">
+                    <img v-for="(image, index) in message.images" :key="index" :src="`http://localhost:5100${image}`" alt="Uploaded image"
+                        class="image-preview">
+                </div>
+                <p>{{ message.text }}</p>
+            </div>
+        </div>
+        <form @submit.prevent="sendMessage">
+            <input type="text" v-model="newMessage" @keypress.enter="sendMessage">
+            <button class="send-button" type="submit">
+                Send <i class='bx bx-send'></i>
+            </button>
+        </form>
+    </div>
+
+    <script>
+        new Vue({
+            el: '#app',
+            data: {
+                messages: [],
+                newMessage: '',
+                imagePreviews: [],
+                imageFiles: []
+            },
+            methods: {
+                sendMessage(event) {
+                    event.preventDefault();
+                    if (this.newMessage.trim() !== '' || this.imageFiles.length) {
+                        const message = {
+                            id: Date.now(),
+                            text: this.newMessage,
+                            images: []
+                        };
+                        if (this.imageFiles.length) {
+                            this.uploadImages(this.imageFiles, message);
+                        } else {
+                            this.messages.push(message);
+                        }
+                        this.newMessage = '';
+                        this.imagePreviews = [];
+                        this.imageFiles = [];
+                        this.scrollToBottom();
+                    }
+                },
+                handlePaste(event) {
+                    const items = (event.clipboardData || event.originalEvent.clipboardData).items;
+                    for (let item of items) {
+                        if (item.type.indexOf('image') !== -1) {
+                            const blob = item.getAsFile();
+                            const reader = new FileReader();
+                            reader.onload = (e) => {
+                                this.imagePreviews.push(e.target.result);
+                                this.imageFiles.push(blob);
+                            };
+                            reader.readAsDataURL(blob);
+                        }
+                    }
+                },
+                uploadImages(files, message) {
+                    const formData = new FormData();
+                    files.forEach((file, index) => {
+                        formData.append('images', file);
+                    });
+                    axios.post('http://localhost:5100/upload', formData, {
+                        headers: {
+                            'Content-Type': 'multipart/form-data'
+                        }
+                    })
+                        .then(response => {
+                            message.images = response.data.filePaths;
+                            this.messages.push(message);
+                        })
+                        .catch(error => {
+                            console.error('There was an error uploading the images!', error);
+                        });
+                },
+                removeImage(index) {
+                    this.imagePreviews.splice(index, 1);
+                    this.imageFiles.splice(index, 1);
+                },
+                scrollToBottom() {
+                    this.$nextTick(() => {
+                        this.$refs.chatBox.scrollTop = this.$refs.chatBox.scrollHeight;
+                    });
+                }
+            },
+            mounted() {
+                window.addEventListener('paste', this.handlePaste);
+            },
+            beforeDestroy() {
+                window.removeEventListener('paste', this.handlePaste);
+            }
+        });
+    </script>
+    </body>
+    
+    </html>
