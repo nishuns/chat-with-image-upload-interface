@@ -120,11 +120,11 @@
         </div>
         <div class="chat-box" ref="chatBox">
             <div class="chat-message" v-for="message in messages" :key="message.id">
-                <div v-if="message.images">
-                    <img v-for="(image, index) in message.images" :key="index" :src="`http://localhost:5100${image}`" alt="Uploaded image"
+                <div v-if="message.images.length">
+                    <img v-for="(image, index) in message.images" :key="index" :src="image" alt="Uploaded image"
                         class="image-preview">
                 </div>
-                <p>{{ message.text }}</p>
+                <p v-html="message.text"></p>
             </div>
         </div>
         <form @submit.prevent="sendMessage">
@@ -151,13 +151,9 @@
                         const message = {
                             id: Date.now(),
                             text: this.newMessage,
-                            images: []
+                            images: this.imagePreviews
                         };
-                        if (this.imageFiles.length) {
-                            this.uploadImages(this.imageFiles, message);
-                        } else {
-                            this.messages.push(message);
-                        }
+                        this.messages.push(message);
                         this.newMessage = '';
                         this.imagePreviews = [];
                         this.imageFiles = [];
@@ -165,40 +161,19 @@
                     }
                 },
                 handlePaste(event) {
-                    const items = (event.clipboardData || event.originalEvent.clipboardData).items;
-                    for (let item of items) {
-                        if (item.type.indexOf('image') !== -1) {
-                            const blob = item.getAsFile();
-                            const reader = new FileReader();
-                            reader.onload = (e) => {
-                                this.imagePreviews.push(e.target.result);
-                                this.imageFiles.push(blob);
-                            };
-                            reader.readAsDataURL(blob);
-                        }
+                    const clipboardData = (event.clipboardData || event.originalEvent.clipboardData).getData('text/html');
+                    if (clipboardData) {
+                        this.parseHtmlAndExtractImages(clipboardData);
                     }
                 },
-                uploadImages(files, message) {
-                    const formData = new FormData();
-                    files.forEach((file, index) => {
-                        formData.append('images', file);
-                    });
-                    axios.post('http://localhost:5100/upload', formData, {
-                        headers: {
-                            'Content-Type': 'multipart/form-data'
-                        }
-                    })
-                        .then(response => {
-                            message.images = response.data.filePaths;
-                            this.messages.push(message);
-                        })
-                        .catch(error => {
-                            console.error('There was an error uploading the images!', error);
-                        });
-                },
-                removeImage(index) {
-                    this.imagePreviews.splice(index, 1);
-                    this.imageFiles.splice(index, 1);
+                parseHtmlAndExtractImages(html) {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+                    const images = Array.from(doc.images).map(img => img.src);
+                    this.imagePreviews.push(...images);
+
+                    const text = doc.body.textContent || "";
+                    this.newMessage = text.trim();
                 },
                 scrollToBottom() {
                     this.$nextTick(() => {
@@ -214,6 +189,6 @@
             }
         });
     </script>
-    </body>
-    
-    </html>
+</body>
+
+</html>
